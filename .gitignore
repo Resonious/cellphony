@@ -1,4 +1,6 @@
 /node_modules/
 /public/build/
+lambda/*.zip
+lambda/cellphony
 
 .DS_Store
