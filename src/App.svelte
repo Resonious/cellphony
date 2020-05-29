@@ -1,15 +1,28 @@
 <script>
   export let name;
 
+  const lambda = 'https://uueg3x70bg.execute-api.us-west-2.amazonaws.com/default/cellphonyRtcNotify';
+
   let connection;
   let channel;
+  let myID = Math.random().toString(36).substr(2, 9);
   let myOffer;
 
-  let remoteOffer = location.hash;
+  let pusher = new Pusher('151c09f47c37e803cb69', {
+    cluster: 'ap3'
+  });
+
+  let remoteOffer = (location.hash.length > 0) &&
+    JSON.parse(atob(location.hash.substr(1)).toString());
+
+  $: remoteID = (!!remoteOffer) &&
+    remoteOffer.id;
 
   let currentHost = location.toString().split('#')[0];
 
-  $: shareUrl = !!myOffer && `${currentHost}#${btoa(JSON.stringify(myOffer))}`;
+  $: shareUrl = (!!myOffer) &&
+    `${currentHost}#${btoa(JSON.stringify({ id: myID, offer: myOffer }))}`;
+
 
   async function host() {
     connection = new RTCPeerConnection();
@@ -17,13 +30,19 @@
     channel.addEventListener('open', onChannelStatusChange);
     channel.addEventListener('close', onChannelStatusChange);
 
+    pusher.subscribe(myID).bind('join', data => {
+      console.log('SOMEBODY WANTS TO JOIN');
+      console.log(data);
+    });
+
     let offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
     console.log(offer);
     myOffer = offer;
+    window.myOffer = offer;
   }
 
-  function join() {
+  async function join() {
     connection = new RTCPeerConnection();
     connection.addEventListener('datachannel', ch => {
       channel = ch;
@@ -31,6 +50,19 @@
       channel.addEventListener('close', onChannelStatusChange);
       console.log('I GOT A CHANNEL !!!');
     });
+
+    await fetch(lambda, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      redirect: 'follow',
+      body: JSON.stringify({ id: myID, room: remoteID, answer: JSON.stringify(answer) })
+    });
+
+    console.log('sent...');
   }
 
   // So I know what's going ON
@@ -40,11 +72,15 @@
 </script>
 
 <main>
-  <h1>Hello {name}!</h1>
+  <h1>Hello {name}! I am {myID}</h1>
+  {#if remoteID}
+    <h2>Joining {remoteID}</h2>
+  {:else if !myOffer}
+    <button on:click={host}>Host</button>
+  {/if}
 
-  <button on:click={host}>Host</button>
-  {#if remoteOffer && remoteOffer.length > 0}
-    <button on:click={join}>Join {remoteOffer}</button>
+  {#if remoteID}
+    <button on:click={join}>Join {remoteID}</button>
   {/if}
 
   {#if shareUrl}
